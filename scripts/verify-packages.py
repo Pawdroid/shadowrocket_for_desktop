@@ -18,7 +18,8 @@ def download(tag,pattern):
     directory=root/tag;directory.mkdir(exist_ok=True)
     command(['gh','release','download',tag,'--repo',repo,'--pattern',pattern,'--dir',str(directory),'--skip-existing'])
     path=directory/pattern
-    data=json.loads(command(['gh','api',f'repos/{repo}/releases/tags/{tag}']).stdout)
+    releases=json.loads(command(['gh','api',f'repos/{repo}/releases?per_page=30']).stdout)
+    data=next(release for release in releases if release['tag_name']==tag)
     item=next(a for a in data['assets'] if a['name']==pattern)
     digest=item.get('digest')
     if digest and digest.startswith('sha256:'):
