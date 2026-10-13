@@ -49,8 +49,8 @@ def stop(process):
         process.terminate()
         try:process.wait(timeout=15)
         except subprocess.TimeoutExpired:process.kill();process.wait(timeout=10)
-def launch(installation,label):
-    exe=executable(installation,'Shadowrocket')
+def launch(installation,label,executable_path=None):
+    exe=executable_path or executable(installation,'Shadowrocket')
     log=(root/(label+'.log')).open('w')
     p=subprocess.Popen([str(exe)],cwd=exe.parent,env=env,stdout=log,stderr=subprocess.STDOUT)
     try:
@@ -70,6 +70,23 @@ def verify_macos(installation):
     command(['xcrun','stapler','validate',str(installation)])
     command(['spctl','--assess','--type','execute',str(installation)])
     results['signature_and_notarization']='passed'
+
+def stop_restarted_gui():
+    time.sleep(5)
+    if system=='win':
+        command(['powershell','-NoProfile','-Command','if (-not (Get-Process Shadowrocket -ErrorAction SilentlyContinue)) { exit 1 }'])
+        command(['taskkill','/F','/IM','Shadowrocket.exe','/T'])
+    else:
+        command(['pgrep','-x','Shadowrocket'])
+        command(['pkill','-x','Shadowrocket'])
+    time.sleep(2)
+
+def upgrade(installation,helper,archive,label,expected_code=0):
+    updater=executable(installation,helper)
+    with (root/(label+'.log')).open('w') as log:
+        p=subprocess.Popen([str(updater),str(archive)],cwd=updater.parent,env=env,stdout=log,stderr=subprocess.STDOUT)
+        p.wait(timeout=120)
+        assert p.returncode==expected_code,f'{label}: updater returned {p.returncode}'
 
 try:
     name=f'Shadowrocket-{target}-{suffix}.zip'
@@ -102,21 +119,24 @@ try:
     else:data=old/'guiConfigs'
     data.mkdir(parents=True,exist_ok=True)
     sentinel=data/'upgrade-verification-sentinel.txt';sentinel.write_text('preserve-existing-user-data')
-    updater=executable(old,'AmazTool')
-    with (root/'upgrade.log').open('w') as log:
-        p=subprocess.Popen([str(updater),str(candidate)],cwd=updater.parent,env=env,stdout=log,stderr=subprocess.STDOUT)
-        p.wait(timeout=120)
-        assert p.returncode==0,'Updater returned failure'
+    upgrade(old,'AmazTool',candidate,'upgrade')
     expected=executable(current,'Shadowrocket')
     actual=executable(old,'Shadowrocket')
     assert hashlib.sha256(actual.read_bytes()).digest()==hashlib.sha256(expected.read_bytes()).digest(),'Updater did not install the candidate binary'
     assert sentinel.read_text()=='preserve-existing-user-data','Upgrade lost user data'
-    if system=='win':subprocess.run(['taskkill','/F','/IM','Shadowrocket.exe','/T'],capture_output=True)
-    else:subprocess.run(['pkill','-x','Shadowrocket'],capture_output=True)
-    time.sleep(2)
+    stop_restarted_gui()
     if system=='osx':verify_macos(old)
     launch(old,'upgraded_gui_start')
     results['upgrade_from_1_0_6']='passed'
+    helper='AmazTool' if system=='win' else 'ShadowrocketUpdater'
+    upgrade(old,helper,candidate,'current_updater')
+    stop_restarted_gui()
+    assert sentinel.read_text()=='preserve-existing-user-data','Current updater lost user data'
+    if system=='osx':verify_macos(old)
+    launch(old,'current_updater_gui_start')
+    results['current_updater_install_and_restart']='passed'
+    upgrade(old,helper,root/'missing-archive.zip','updater_missing_archive',expected_code=1)
+    results['updater_failure_exit']='passed'
     if system=='linux':
         for tag in ('v1.0.6',args.candidate):
             deb=download(tag,f'Shadowrocket-linux-{suffix}.deb')
@@ -125,6 +145,7 @@ try:
         assert version.strip()==args.candidate.removeprefix('v'),'Installed Debian version mismatch'
         core=Path('/opt/shadowrocket/bin/xray/xray')
         assert os.access(core,os.X_OK),'Installed core is not executable'
+        launch(Path('/opt/shadowrocket'),'debian_installed_gui_start',Path('/usr/bin/shadowrocket'))
         results['debian_install_and_package_upgrade']='passed'
     results['status']='passed'
 finally:
