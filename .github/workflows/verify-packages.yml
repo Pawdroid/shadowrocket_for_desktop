@@ -1,0 +1,31 @@
+name: Verify release packages
+on:
+  workflow_dispatch:
+    inputs:
+      candidate:
+        description: Candidate release tag (empty only checks runner availability)
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: windows-2025, platform: windows, arch: x64, rid: win-x64 }
+          - { runner: windows-11-arm, platform: windows, arch: arm64, rid: win-arm64 }
+          - { runner: ubuntu-24.04, platform: linux, arch: x64, rid: linux-x64 }
+          - { runner: ubuntu-24.04-arm, platform: linux, arch: arm64, rid: linux-arm64 }
+          - { runner: macos-15-intel, platform: macos, arch: x64, rid: osx-x64 }
+          - { runner: macos-15, platform: macos, arch: arm64, rid: osx-arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Runner availability
+        shell: bash
+        run: |
+          uname -a
+          dotnet --info
