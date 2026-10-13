@@ -7,7 +7,7 @@ on:
         required: false
         type: string
 permissions:
-  contents: read
+  contents: write
 jobs:
   verify:
     strategy:
@@ -29,3 +29,33 @@ jobs:
         run: |
           uname -a
           dotnet --info
+      - name: Setup .NET for package checks
+        if: inputs.candidate != ''
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.x'
+      - name: Install Linux GUI dependencies
+        if: inputs.candidate != '' && matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xdotool fonts-noto-cjk libicu74 libfontconfig1 libfreetype6 libx11-6 libice6 libsm6
+      - name: Verify Windows and macOS install and upgrade
+        if: inputs.candidate != '' && matrix.platform != 'linux'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/verify-packages.py --candidate "${{ inputs.candidate }}" --rid "${{ matrix.rid }}"
+      - name: Verify Linux install and upgrade
+        if: inputs.candidate != '' && matrix.platform == 'linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: xvfb-run -a python3 scripts/verify-packages.py --candidate "${{ inputs.candidate }}" --rid "${{ matrix.rid }}"
+      - name: Save verification evidence
+        if: always() && inputs.candidate != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: verification-${{ matrix.rid }}
+          path: |
+            package-verification/results.json
+            package-verification/*.log
+          if-no-files-found: warn
