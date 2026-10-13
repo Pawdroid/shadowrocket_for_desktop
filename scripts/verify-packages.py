@@ -49,10 +49,10 @@ def stop(process):
         process.terminate()
         try:process.wait(timeout=15)
         except subprocess.TimeoutExpired:process.kill();process.wait(timeout=10)
-def launch(installation,label,executable_path=None):
+def launch(installation,label,executable_path=None,extra_env=None):
     exe=executable_path or executable(installation,'Shadowrocket')
     log=(root/(label+'.log')).open('w')
-    p=subprocess.Popen([str(exe)],cwd=exe.parent,env=env,stdout=log,stderr=subprocess.STDOUT)
+    p=subprocess.Popen([str(exe)],cwd=exe.parent,env={**env,**(extra_env or {})},stdout=log,stderr=subprocess.STDOUT)
     try:
         time.sleep(15)
         assert p.poll() is None,f'{label}: GUI exited during startup'
@@ -67,7 +67,17 @@ def launch(installation,label,executable_path=None):
     return exe
 def verify_macos(installation):
     command(['codesign','--verify','--deep','--strict',str(installation)])
-    command(['xcrun','stapler','validate',str(installation)])
+    argv=['xcrun','stapler','validate',str(installation)]
+    for attempt in range(3):
+        validation=subprocess.run(argv,text=True,encoding='utf-8',errors='replace',capture_output=True)
+        if validation.returncode==0:break
+        output=validation.stdout+validation.stderr
+        transient=any(error in output for error in ('NSURLErrorDomain Code=-1005','NSURLErrorDomain Code=-1001','NSURLErrorDomain Code=-1009'))
+        if not transient or attempt==2:
+            print(output)
+            raise subprocess.CalledProcessError(validation.returncode,argv)
+        print('Apple ticket validation network error; retrying')
+        time.sleep(5*(attempt+1))
     command(['spctl','--assess','--type','execute',str(installation)])
     results['signature_and_notarization']='passed'
 
@@ -166,7 +176,10 @@ try:
         assert version.strip()==args.candidate.removeprefix('v'),'Installed Debian version mismatch'
         core=Path('/opt/shadowrocket/bin/xray/xray')
         assert os.access(core,os.X_OK),'Installed core is not executable'
-        launch(Path('/opt/shadowrocket'),'debian_installed_gui_start',Path('/usr/bin/shadowrocket'))
+        missing_user_data=root/'new-user-data'
+        assert not missing_user_data.exists()
+        launch(Path('/opt/shadowrocket'),'debian_installed_gui_start',Path('/usr/bin/shadowrocket'),{'XDG_DATA_HOME':str(missing_user_data)})
+        assert (missing_user_data/'Shadowrocket'/'guiLogs').is_dir(),'Debian install did not create the user log directory'
         results['debian_install_and_package_upgrade']='passed'
     results['status']='passed'
 finally:
