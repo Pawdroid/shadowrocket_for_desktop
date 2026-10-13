@@ -98,6 +98,15 @@ def upgrade(installation,helper,archive,label,expected_code=0):
         p.wait(timeout=120)
         assert p.returncode==expected_code,f'{label}: updater returned {p.returncode}'
 
+def verify_payload(archive,installation):
+    with zipfile.ZipFile(archive) as package:
+        for entry in package.infolist():
+            if entry.is_dir():continue
+            relative=entry.filename.split('/',1)[1]
+            installed=installation/relative
+            assert installed.is_file(),f'Upgrade missed {relative}'
+            assert hashlib.sha256(installed.read_bytes()).digest()==hashlib.sha256(package.read(entry)).digest(),f'Upgrade did not replace {relative}'
+
 try:
     name=f'Shadowrocket-{target}-{suffix}.zip'
     candidate=download(args.candidate,name)
@@ -130,6 +139,7 @@ try:
     data.mkdir(parents=True,exist_ok=True)
     sentinel=data/'upgrade-verification-sentinel.txt';sentinel.write_text('preserve-existing-user-data')
     upgrade(old,'AmazTool',candidate,'upgrade')
+    verify_payload(candidate,old)
     expected=executable(current,'Shadowrocket')
     actual=executable(old,'Shadowrocket')
     assert hashlib.sha256(actual.read_bytes()).digest()==hashlib.sha256(expected.read_bytes()).digest(),'Updater did not install the candidate binary'
@@ -140,6 +150,7 @@ try:
     results['upgrade_from_1_0_6']='passed'
     helper='AmazTool' if system=='win' else 'ShadowrocketUpdater'
     upgrade(old,helper,candidate,'current_updater')
+    verify_payload(candidate,old)
     stop_restarted_gui()
     assert sentinel.read_text()=='preserve-existing-user-data','Current updater lost user data'
     if system=='osx':verify_macos(old)
