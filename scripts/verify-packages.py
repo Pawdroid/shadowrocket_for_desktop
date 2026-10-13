@@ -13,7 +13,11 @@ results={}
 repo='Pawdroid/shadowrocket_for_desktop'
 env={k:v for k,v in os.environ.items() if k not in ('GH_TOKEN','GITHUB_TOKEN','V2RAYN_LOCAL_APPLICATION_DATA_V2')}
 def command(argv,**kwargs):
-    return subprocess.run(argv,check=True,text=True,capture_output=True,**kwargs)
+    result=subprocess.run(argv,text=True,encoding='utf-8',errors='replace',capture_output=True,**kwargs)
+    if result.returncode:
+        print(result.stdout[-6000:]);print(result.stderr[-6000:])
+        raise subprocess.CalledProcessError(result.returncode,argv)
+    return result
 def download(tag,pattern):
     directory=root/tag;directory.mkdir(exist_ok=True)
     command(['gh','release','download',tag,'--repo',repo,'--pattern',pattern,'--dir',str(directory),'--skip-existing'])
