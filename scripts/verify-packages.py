@@ -68,16 +68,16 @@ def launch(installation,label,executable_path=None,extra_env=None):
 def verify_macos(installation):
     command(['codesign','--verify','--deep','--strict',str(installation)])
     argv=['xcrun','stapler','validate',str(installation)]
-    for attempt in range(3):
+    for attempt in range(6):
         validation=subprocess.run(argv,text=True,encoding='utf-8',errors='replace',capture_output=True)
         if validation.returncode==0:break
         output=validation.stdout+validation.stderr
         transient=any(error in output for error in ('NSURLErrorDomain Code=-1005','NSURLErrorDomain Code=-1001','NSURLErrorDomain Code=-1009'))
-        if not transient or attempt==2:
+        if not transient or attempt==5:
             print(output)
             raise subprocess.CalledProcessError(validation.returncode,argv)
         print('Apple ticket validation network error; retrying')
-        time.sleep(5*(attempt+1))
+        time.sleep(10*(attempt+1))
     command(['spctl','--assess','--type','execute',str(installation)])
     results['signature_and_notarization']='passed'
 

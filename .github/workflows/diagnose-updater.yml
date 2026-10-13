@@ -1,11 +1,6 @@
 name: Diagnose Windows updater
 on:
   workflow_dispatch:
-    inputs:
-      diagnostic:
-        description: Use the explicitly authorized temporary diagnostic helper
-        type: boolean
-        default: false
 permissions:
   contents: write
 jobs:
@@ -17,7 +12,7 @@ jobs:
       - shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/diagnose-updater.py ${{ inputs.diagnostic && '--diagnostic' || '' }}
+        run: python scripts/diagnose-updater.py
       - uses: actions/upload-artifact@v7
         if: always()
         with:

@@ -1,4 +1,4 @@
-import os, shutil, subprocess, zipfile, time, tempfile, sys
+import os, subprocess, zipfile, time
 from pathlib import Path
 root=Path.cwd()/"updater-diagnosis";root.mkdir()
 subprocess.run(["gh","release","download","v1.0.7","--repo","Pawdroid/shadowrocket_for_desktop","--pattern","Shadowrocket-windows-64.zip","--dir",str(root)],check=True)
@@ -36,14 +36,3 @@ for mode in ("full","exclude-updater"):
         print("Exit",p.returncode,file=log)
     subprocess.run(["taskkill","/F","/IM","Shadowrocket.exe","/T"],capture_output=True)
     print((root/(mode+".log")).read_text(encoding="utf-8",errors="replace"))
-if '--diagnostic' in sys.argv:
-    name='AmazTool-diagnostic-win-x64.exe'
-    subprocess.run(['gh','release','download','v1.0.7','--repo','Pawdroid/shadowrocket_for_desktop','--pattern',name,'--dir',str(root)],check=True)
-    folder=root/'with-diagnostic';folder.mkdir()
-    with zipfile.ZipFile(archive) as package:package.extractall(folder)
-    installed=next(folder.iterdir());shutil.copy2(root/name,installed/'AmazTool.exe')
-    with (root/'diagnostic.log').open('w') as log:
-        process=subprocess.Popen([str(installed/'AmazTool.exe'),str(archive)],cwd=installed,env=env,stdout=log,stderr=subprocess.STDOUT)
-        process.wait(timeout=120)
-        print('Exit',process.returncode,file=log)
-    print((root/'diagnostic.log').read_text(encoding='utf-8',errors='replace'))
