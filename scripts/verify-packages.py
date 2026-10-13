@@ -137,6 +137,27 @@ try:
     results['current_updater_install_and_restart']='passed'
     upgrade(old,helper,root/'missing-archive.zip','updater_missing_archive',expected_code=1)
     results['updater_failure_exit']='passed'
+    # Exercise different single-file bundle offsets without changing the signed app:
+    # the current helper installs a portable fixture containing the legacy helper.
+    fixture=root/'updater-self-replacement';fixture.mkdir()
+    source=executable(current,helper)
+    running=executable(fixture,helper) if system!='osx' else fixture/helper
+    shutil.copy2(source,running)
+    running.chmod(0o755)
+    legacy_member='Shadowrocket.app/Contents/MacOS/AmazTool' if system=='osx' else f'Shadowrocket-{target}-{suffix}/AmazTool'+('.exe' if system=='win' else '')
+    with zipfile.ZipFile(baseline) as package:legacy_bytes=package.read(legacy_member)
+    different_bundle=root/'different-updater-bundle.zip'
+    with zipfile.ZipFile(different_bundle,'w',compression=zipfile.ZIP_DEFLATED) as package:
+        for filename,content in [('Shadowrocket'+('.exe' if system=='win' else ''),core.read_bytes()),(running.name,legacy_bytes)]:
+            entry=zipfile.ZipInfo('fixture/'+filename);entry.external_attr=0o100755<<16
+            package.writestr(entry,content)
+    # This fixture intentionally lives outside a .app, so invoke its helper directly.
+    with (root/'updater_self_replacement.log').open('w') as log:
+        p=subprocess.Popen([str(running),str(different_bundle)],cwd=fixture,env=env,stdout=log,stderr=subprocess.STDOUT)
+        p.wait(timeout=120)
+        assert p.returncode==0,'Current updater failed when its bundle layout changed'
+    assert running.read_bytes()==legacy_bytes,'Fixture updater was not replaced'
+    results['updater_self_replacement']='passed'
     if system=='linux':
         for tag in ('v1.0.6',args.candidate):
             deb=download(tag,f'Shadowrocket-linux-{suffix}.deb')
