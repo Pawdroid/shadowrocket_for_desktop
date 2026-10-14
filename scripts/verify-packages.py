@@ -130,6 +130,21 @@ try:
     assert '26.7.28' in command([str(core),'version'],env=env).stdout
     results['native_core_start']='passed'
     launch(current,'fresh_gui_start')
+    previous_archive=download('v1.0.7',name)
+    previous=extract(previous_archive,root/'upgrade-from-1.0.7')
+    launch(previous,'baseline_1_0_7_gui_start')
+    previous_data=(Path.home()/'Library'/'Application Support'/'Shadowrocket'/'guiConfigs') if system=='osx' else previous/'guiConfigs'
+    previous_data.mkdir(parents=True,exist_ok=True)
+    previous_sentinel=previous_data/'upgrade-1.0.7-sentinel.txt'
+    previous_sentinel.write_text('preserve-existing-1.0.7-user-data')
+    previous_helper='AmazTool' if system=='win' else 'ShadowrocketUpdater'
+    upgrade(previous,previous_helper,candidate,'upgrade_from_1_0_7')
+    verify_payload(candidate,previous)
+    assert previous_sentinel.read_text()=='preserve-existing-1.0.7-user-data','Upgrade from 1.0.7 lost user data'
+    stop_restarted_gui()
+    if system=='osx':verify_macos(previous)
+    launch(previous,'upgraded_1_0_7_gui_start')
+    results['upgrade_from_1_0_7']='passed'
     baseline=download('v1.0.6',name)
     old=extract(baseline,root/'upgrade-install')
     launch(old,'baseline_gui_start')
@@ -180,9 +195,11 @@ try:
     assert running.read_bytes()==legacy_bytes,'Fixture updater was not replaced'
     results['updater_self_replacement']='passed'
     if system=='linux':
-        for tag in ('v1.0.6',args.candidate):
+        for tag in ('v1.0.6','v1.0.7',args.candidate):
             deb=download(tag,f'Shadowrocket-linux-{suffix}.deb')
             command(['sudo','apt-get','install','-y',str(deb)])
+            installed_version=command(['dpkg-query','-W','-f=${Version}','shadowrocket']).stdout.strip()
+            assert installed_version==tag.removeprefix('v'),'Debian installation version mismatch'
         version=command(['dpkg-query','-W','-f=${Version}','shadowrocket']).stdout
         assert version.strip()==args.candidate.removeprefix('v'),'Installed Debian version mismatch'
         core=Path('/opt/shadowrocket/bin/xray/xray')
